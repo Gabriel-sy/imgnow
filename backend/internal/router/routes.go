@@ -12,6 +12,7 @@ func SetupRoutes(app *app.Application) *gin.Engine {
 
 	fileController := controller.NewFileController(app)
 	r.POST("/upload", fileController.UploadFile)
+	r.GET("/:hash", fileController.GetFileByHash)
 
 	return r
 }

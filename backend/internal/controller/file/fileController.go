@@ -7,11 +7,11 @@ import (
 	"gabrielsy/imgnow/internal/types"
 	"gabrielsy/imgnow/internal/util"
 	"net/http"
-	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
 )
 
 type FileController struct {
@@ -32,33 +32,44 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 		return
 	}
 
-	err = godotenv.Load(".env")
-	if err != nil {
-		util.LogError(err, "Failed to load .env file", fc.app)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load .env file"})
-		return
-	}
-	websiteName := os.Getenv("WEBSITE_URL")
-
-	var hash string
+	urlName := c.Query("urlName")
+	var customUrl string
 	var exists bool
-	for {
-		hash = util.GenerateHash()
-		exists, err = fileRepo.HashExists(fc.app, hash)
+
+	// urlName provided, use it as url
+	if urlName != "" {
+		exists, err = fileRepo.HashExists(fc.app, urlName)
 		if err != nil {
-			util.LogError(err, "Failed to check hash existence", fc.app)
+			util.LogError(err, "Failed to check url name existence", fc.app)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process file"})
 			return
 		}
-		if !exists {
-			break
+		if exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "URL name already exists"})
+			return
+		}
+		customUrl = urlName
+	} else {
+		// urlName not provided, generate a random 5 digit hash
+		for {
+			customUrl = util.GenerateHash()
+			exists, err = fileRepo.HashExists(fc.app, customUrl)
+			if err != nil {
+				util.LogError(err, "Failed to check hash existence", fc.app)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process file"})
+				return
+			}
+			if !exists {
+				break
+			}
 		}
 	}
 
+	websiteName := util.GetEnv("WEBSITE_URL", fc.app)
 	fileRecord := &types.File{
-		Hash:         hash,
-		Path:         fmt.Sprintf("%s/%s", websiteName, hash),
-		OriginalName: file.Filename,
+		CustomUrl:    customUrl,
+		Path:         fmt.Sprintf("%s/%s", websiteName, customUrl),
+		OriginalName: strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename)),
 		Size:         int(file.Size),
 		Type:         file.Header.Get("Content-Type"),
 		CreatedAt:    time.Now(),
@@ -72,4 +83,28 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "File uploaded successfully", "path": fileRecord.Path})
+}
+
+func (fc *FileController) GetFileByHash(c *gin.Context) {
+	hash := c.Param("hash")
+	if hash == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Hash parameter is required"})
+		return
+	}
+
+	file, err := fileRepo.FindHash(fc.app, hash)
+	if err != nil {
+		util.LogError(err, "Failed to find file", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process request"})
+		return
+	}
+
+	if file == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"path": file.Path,
+	})
 }

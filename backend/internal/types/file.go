@@ -4,7 +4,7 @@ import "time"
 
 type File struct {
 	Id           int
-	Hash         string
+	CustomUrl    string
 	Path         string
 	OriginalName string
 	Size         int

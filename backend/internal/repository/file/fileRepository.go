@@ -5,10 +5,10 @@ import (
 	"gabrielsy/imgnow/internal/types"
 )
 
-func FindHash(app *app.Application, hash string) (*types.File, error) {
-	query := `SELECT * FROM file WHERE hash = $1`
+func FindHash(app *app.Application, customUrl string) (*types.File, error) {
+	query := `SELECT * FROM file WHERE custom_url = $1`
 
-	rows, err := app.DB.Query(query, hash)
+	rows, err := app.DB.Query(query, customUrl)
 
 	if err != nil {
 		return nil, err
@@ -18,7 +18,7 @@ func FindHash(app *app.Application, hash string) (*types.File, error) {
 
 	for rows.Next() {
 		var file types.File
-		err := rows.Scan(&file.Id, &file.Hash, &file.Path, &file.OriginalName, &file.Size, &file.Type, &file.CreatedAt)
+		err := rows.Scan(&file.Id, &file.CustomUrl, &file.Path, &file.OriginalName, &file.Size, &file.Type, &file.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -29,7 +29,7 @@ func FindHash(app *app.Application, hash string) (*types.File, error) {
 }
 
 func CreateFile(app *app.Application, file *types.File) error {
-	query := `INSERT INTO file (hash, path, original_name, size, type, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
+	query := `INSERT INTO file (custom_url, path, original_name, size, type, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
 
 	tx, err := app.DB.Begin()
 	if err != nil {
@@ -37,7 +37,7 @@ func CreateFile(app *app.Application, file *types.File) error {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(query, file.Hash, file.Path, file.OriginalName, file.Size, file.Type, file.CreatedAt)
+	_, err = tx.Exec(query, file.CustomUrl, file.Path, file.OriginalName, file.Size, file.Type, file.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -49,8 +49,8 @@ func CreateFile(app *app.Application, file *types.File) error {
 	return nil
 }
 
-func HashExists(app *app.Application, hash string) (bool, error) {
-	file, err := FindHash(app, hash)
+func HashExists(app *app.Application, customUrl string) (bool, error) {
+	file, err := FindHash(app, customUrl)
 	if err != nil {
 		return false, err
 	}
