@@ -3,33 +3,39 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type VideoMessage struct {
-	Filename    string `json:"filename"`
-	Content     []byte `json:"content"`
+	Filename string `json:"filename"`
+	Content  []byte `json:"content"`
 }
 
-func logError(err error, msg string) {
+type logger struct {
+	logger *log.Logger
+}
+
+func (l *logger) logError(err error, msg string) {
 	if err != nil {
-		log.Printf("%s: %v", msg, err)
+		l.logger.Printf("%s: %v", msg, err)
 	}
 }
 
 func main() {
+	l := &logger{logger: log.New(os.Stdout, "", log.Ldate|log.Ltime)}
+
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
-	logError(err, "Failed to connect to RabbitMQ")
+	l.logError(err, "Failed to connect to RabbitMQ")
 
 	defer conn.Close()
 
 	ch, err := conn.Channel()
-	logError(err, "Failed to open a channel")
+	l.logError(err, "Failed to open a channel")
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
@@ -40,7 +46,7 @@ func main() {
 		false,
 		nil,
 	)
-	logError(err, "Failed to declare a queue")
+	l.logError(err, "Failed to declare a queue")
 
 	msgs, err := ch.Consume(
 		q.Name,
@@ -51,7 +57,7 @@ func main() {
 		false,
 		nil,
 	)
-	logError(err, "Failed to register a consumer")
+	l.logError(err, "Failed to register a consumer")
 
 	forever := make(chan bool)
 
@@ -59,7 +65,7 @@ func main() {
 		for d := range msgs {
 			var videoMsg VideoMessage
 			if err := json.Unmarshal(d.Body, &videoMsg); err != nil {
-				log.Printf("Error parsing JSON: %v", err)
+				l.logger.Printf("Error parsing JSON: %v", err)
 				continue
 			}
 
@@ -86,9 +92,9 @@ func main() {
 
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				log.Fatalf("Error executing FFmpeg: %s\n%s", err, output)
+				l.logger.Fatalf("Error executing FFmpeg: %s\n%s", err, output)
 			}
-			fmt.Printf("Video compressed successfully\n")
+			l.logger.Printf("Video compressed successfully\n")
 
 			var returnMessage VideoMessage
 			returnMessage.Filename = videoMsg.Filename
@@ -96,7 +102,7 @@ func main() {
 
 			returnMessageBytes, err := json.Marshal(returnMessage)
 			if err != nil {
-				log.Printf("Error marshalling return message: %v", err)
+				l.logger.Printf("Error marshalling return message: %v", err)
 				continue
 			}
 
@@ -110,6 +116,6 @@ func main() {
 		}
 	}()
 
-	log.Printf("Waiting for messages. To exit press CTRL+C")
+	l.logger.Printf("Waiting for messages. To exit press CTRL+C")
 	<-forever
 }
