@@ -11,8 +11,9 @@ const (
 )
 
 type VideoMessage struct {
-	Filename string `json:"filename"`
-	Content  []byte `json:"content"`
+	Filename  string `json:"filename"`
+	Content   []byte `json:"content"`
+	RequestID string `json:"request_id"`
 }
 
 type File struct {

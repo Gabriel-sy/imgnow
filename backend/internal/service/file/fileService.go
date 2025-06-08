@@ -97,6 +97,7 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 
 	client := s3.NewFromConfig(cfg)
 
+	util.LogInfo(fmt.Sprintf("Placing file in bucket: %s", customUrl), fs.app)
 
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:        aws.String(os.Getenv("R2_BUCKET_NAME")),
@@ -106,6 +107,7 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 		ContentLength: aws.Int64(contentLength),
 	})
 
+	util.LogInfo(fmt.Sprintf("File uploaded to R2: %s", customUrl), fs.app)
 
 	return err
 }
@@ -258,14 +260,16 @@ func (fs *FileService) handleVideoCompression(file *multipart.FileHeader) (io.Re
 		return nil, 0, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	filename := util.GenerateHash() + filepath.Ext(file.Filename)
+	requestID := util.GenerateHash()
+	filename := requestID + filepath.Ext(file.Filename)
 	message := types.VideoMessage{
-		Filename: filename,
-		Content:  fileBytes,
+		Filename:  filename,
+		Content:   fileBytes,
+		RequestID: requestID,
 	}
 
-	// Setup response queue
-	responseQueue, err := fs.setupResponseQueue()
+	// Setup response queue with unique name
+	responseQueue, err := fs.setupResponseQueue(requestID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -285,17 +289,17 @@ func (fs *FileService) handleVideoCompression(file *multipart.FileHeader) (io.Re
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	return fs.waitForCompressedVideo(ctx, msgs, filename)
+	return fs.waitForCompressedVideo(ctx, msgs, requestID)
 }
 
-func (fs *FileService) setupResponseQueue() (*amqp.Queue, error) {
+func (fs *FileService) setupResponseQueue(requestID string) (*amqp.Queue, error) {
 	responseQueue, err := fs.amqpChannel.QueueDeclare(
-		"video_queue", // name
-		true,          // durable
-		false,         // delete when unused
-		false,         // exclusive
-		false,         // no-wait
-		nil,           // arguments
+		"video_queue"+requestID, // unique queue name
+		true,                     // durable
+		true,                     // delete when unused
+		false,                    // exclusive
+		false,                    // no-wait
+		nil,                      // arguments
 	)
 	if err != nil {
 		util.LogError(err, "Failed to declare response queue", fs.app)
@@ -336,11 +340,12 @@ func (fs *FileService) publishVideoForCompression(message types.VideoMessage) er
 		amqp.Publishing{
 			ContentType: "application/json",
 			Body:        messageBytes,
+			ReplyTo:     "video_queue" + message.RequestID,
 		},
 	)
 }
 
-func (fs *FileService) waitForCompressedVideo(ctx context.Context, msgs <-chan amqp.Delivery, expectedFilename string) (io.Reader, int64, error) {
+func (fs *FileService) waitForCompressedVideo(ctx context.Context, msgs <-chan amqp.Delivery, requestID string) (io.Reader, int64, error) {
 	for {
 		select {
 		case msg := <-msgs:
@@ -350,7 +355,8 @@ func (fs *FileService) waitForCompressedVideo(ctx context.Context, msgs <-chan a
 				return nil, 0, fmt.Errorf("failed to unmarshal response: %w", err)
 			}
 
-			if response.Filename == expectedFilename {
+			if response.RequestID == requestID {
+				util.LogInfo(fmt.Sprintf("Received compressed video for request: %s", requestID), fs.app)
 				return bytes.NewReader(response.Content), int64(len(response.Content)), nil
 			}
 		case <-ctx.Done():
