@@ -3,9 +3,11 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"gabrielsy/imgnow/internal/app"
 	fileRepo "gabrielsy/imgnow/internal/repository/file"
+	"gabrielsy/imgnow/internal/types"
 	"gabrielsy/imgnow/internal/util"
 	"image"
 	"image/jpeg"
@@ -13,61 +15,35 @@ import (
 	"io"
 	"mime/multipart"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/nfnt/resize"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type FileService struct {
-	app *app.Application
+	app         *app.Application
+	amqpConn    *amqp.Connection
+	amqpChannel *amqp.Channel
 }
 
 func NewFileService(app *app.Application) *FileService {
-	return &FileService{app: app}
-}
-
-func compressImage(src multipart.File, contentType string) (*bytes.Buffer, error) {
-	if _, err := src.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("failed to seek file: %w", err)
-	}
-
-	img, _, err := image.Decode(src)
+	amqpConn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	if err != nil {
-		return nil, err
+		util.LogError(err, "Failed to connect to RabbitMQ", app)
+		return nil
 	}
-
-	maxSize := uint(1920)
-	width := img.Bounds().Dx()
-	height := img.Bounds().Dy()
-
-	var newWidth, newHeight uint
-	if width > height {
-		newWidth = maxSize
-		newHeight = uint(float64(height) * float64(maxSize) / float64(width))
-	} else {
-		newHeight = maxSize
-		newWidth = uint(float64(width) * float64(maxSize) / float64(height))
-	}
-
-	resized := resize.Resize(newWidth, newHeight, img, resize.Lanczos3)
-
-	compressed := &bytes.Buffer{}
-
-	if strings.Contains(contentType, "jpeg") || strings.Contains(contentType, "jpg") {
-		err = jpeg.Encode(compressed, resized, &jpeg.Options{Quality: 80})
-	} else if strings.Contains(contentType, "png") {
-		err = png.Encode(compressed, resized)
-	} else {
-		return nil, fmt.Errorf("unsupported image format: %s", contentType)
-	}
-
+	amqpChannel, err := amqpConn.Channel()
 	if err != nil {
-		return nil, err
+		util.LogError(err, "Failed to open a channel", app)
+		return nil
 	}
-	return compressed, nil
+	return &FileService{app: app, amqpConn: amqpConn, amqpChannel: amqpChannel}
 }
 
 func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) error {
@@ -77,23 +53,23 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 	}
 	defer src.Close()
 
-	contentType := file.Header.Get("Content-Type")
 	var body io.Reader = src
 	var contentLength int64 = file.Size
 
+	contentType := file.Header.Get("Content-Type")
 	if strings.Contains(contentType, "image/") {
-		compressedBody, err := compressImage(src, contentType)
+		body, contentLength, err = fs.handleImageCompression(file, contentType)
 		if err != nil {
-			util.LogError(err, "Could not compress image, using original", fs.app)
-		} else {
-			if int64(compressedBody.Len()) < file.Size {
-				body = compressedBody
-				contentLength = int64(compressedBody.Len())
-			} else {
-				if _, err := src.Seek(0, io.SeekStart); err != nil {
-					return fmt.Errorf("failed to seek original file after failed compression: %w", err)
-				}
-			}
+			util.LogError(err, "Failed to handle image compression", fs.app)
+			return err
+		}
+	}
+
+	if strings.Contains(contentType, "video/") {
+		body, contentLength, err = fs.handleVideoCompression(file)
+		if err != nil {
+			util.LogError(err, "Failed to handle video compression", fs.app)
+			return err
 		}
 	}
 
@@ -121,6 +97,7 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 
 	client := s3.NewFromConfig(cfg)
 
+
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:        aws.String(os.Getenv("R2_BUCKET_NAME")),
 		Key:           aws.String(customUrl),
@@ -128,6 +105,7 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 		ContentType:   aws.String(contentType),
 		ContentLength: aws.Int64(contentLength),
 	})
+
 
 	return err
 }
@@ -199,4 +177,185 @@ func (fs *FileService) GenerateCustomUrl(urlName string) (string, error) {
 	}
 
 	return customUrl, nil
+}
+
+func compressImage(src multipart.File, contentType string) (*bytes.Buffer, error) {
+	if _, err := src.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to seek file: %w", err)
+	}
+
+	img, _, err := image.Decode(src)
+	if err != nil {
+		return nil, err
+	}
+
+	maxSize := uint(1920)
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
+
+	var newWidth, newHeight uint
+	if width > height {
+		newWidth = maxSize
+		newHeight = uint(float64(height) * float64(maxSize) / float64(width))
+	} else {
+		newHeight = maxSize
+		newWidth = uint(float64(width) * float64(maxSize) / float64(height))
+	}
+
+	resized := resize.Resize(newWidth, newHeight, img, resize.Lanczos3)
+
+	compressed := &bytes.Buffer{}
+
+	if strings.Contains(contentType, "jpeg") || strings.Contains(contentType, "jpg") {
+		err = jpeg.Encode(compressed, resized, &jpeg.Options{Quality: 80})
+	} else if strings.Contains(contentType, "png") {
+		err = png.Encode(compressed, resized)
+	} else {
+		return nil, fmt.Errorf("unsupported image format: %s", contentType)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return compressed, nil
+}
+
+func (fs *FileService) handleImageCompression(file *multipart.FileHeader, contentType string) (io.Reader, int64, error) {
+	src, err := file.Open()
+	if err != nil {
+		return nil, 0, err
+	}
+	defer src.Close()
+
+	var body io.Reader = src
+	var contentLength int64 = file.Size
+
+	compressedBody, err := compressImage(src, contentType)
+	if err != nil {
+		util.LogError(err, "Could not compress image, using original", fs.app)
+	} else {
+		if int64(compressedBody.Len()) < file.Size {
+			body = compressedBody
+			contentLength = int64(compressedBody.Len())
+		} else {
+			if _, err := src.Seek(0, io.SeekStart); err != nil {
+				return nil, 0, fmt.Errorf("failed to seek original file after failed compression: %w", err)
+			}
+		}
+	}
+	return body, contentLength, nil
+}
+
+func (fs *FileService) handleVideoCompression(file *multipart.FileHeader) (io.Reader, int64, error) {
+	src, err := file.Open()
+	if err != nil {
+		return nil, 0, err
+	}
+	defer src.Close()
+
+	fileBytes, err := io.ReadAll(src)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	filename := util.GenerateHash() + filepath.Ext(file.Filename)
+	message := types.VideoMessage{
+		Filename: filename,
+		Content:  fileBytes,
+	}
+
+	// Setup response queue
+	responseQueue, err := fs.setupResponseQueue()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Setup consumer
+	msgs, err := fs.setupQueueConsumer(responseQueue.Name)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Publish video for compression
+	if err := fs.publishVideoForCompression(message); err != nil {
+		return nil, 0, err
+	}
+
+	// Wait for response with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	return fs.waitForCompressedVideo(ctx, msgs, filename)
+}
+
+func (fs *FileService) setupResponseQueue() (*amqp.Queue, error) {
+	responseQueue, err := fs.amqpChannel.QueueDeclare(
+		"video_queue", // name
+		true,          // durable
+		false,         // delete when unused
+		false,         // exclusive
+		false,         // no-wait
+		nil,           // arguments
+	)
+	if err != nil {
+		util.LogError(err, "Failed to declare response queue", fs.app)
+		return nil, fmt.Errorf("failed to declare response queue: %w", err)
+	}
+	return &responseQueue, nil
+}
+
+func (fs *FileService) setupQueueConsumer(queueName string) (<-chan amqp.Delivery, error) {
+	msgs, err := fs.amqpChannel.Consume(
+		queueName, // queue
+		"",        // consumer
+		true,      // auto-ack
+		false,     // exclusive
+		false,     // no-local
+		false,     // no-wait
+		nil,       // args
+	)
+	if err != nil {
+		util.LogError(err, "Failed to register a consumer", fs.app)
+		return nil, fmt.Errorf("failed to register a consumer: %w", err)
+	}
+	return msgs, nil
+}
+
+func (fs *FileService) publishVideoForCompression(message types.VideoMessage) error {
+	messageBytes, err := json.Marshal(message)
+	if err != nil {
+		util.LogError(err, "Failed to marshal message", fs.app)
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	return fs.amqpChannel.PublishWithContext(context.TODO(),
+		"",
+		"video_compress_queue",
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "application/json",
+			Body:        messageBytes,
+		},
+	)
+}
+
+func (fs *FileService) waitForCompressedVideo(ctx context.Context, msgs <-chan amqp.Delivery, expectedFilename string) (io.Reader, int64, error) {
+	for {
+		select {
+		case msg := <-msgs:
+			var response types.VideoMessage
+			if err := json.Unmarshal(msg.Body, &response); err != nil {
+				util.LogError(err, "Failed to unmarshal response", fs.app)
+				return nil, 0, fmt.Errorf("failed to unmarshal response: %w", err)
+			}
+
+			if response.Filename == expectedFilename {
+				return bytes.NewReader(response.Content), int64(len(response.Content)), nil
+			}
+		case <-ctx.Done():
+			util.LogError(nil, "Timeout waiting for video compression response", fs.app)
+			return nil, 0, fmt.Errorf("timeout waiting for video compression response")
+		}
+	}
 }

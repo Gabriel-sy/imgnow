@@ -26,6 +26,7 @@ func NewFileController(app *app.Application) *FileController {
 }
 
 func (fc *FileController) UploadFile(c *gin.Context) {
+	fileService := fileService.NewFileService(fc.app)
 	file, err := c.FormFile("file")
 	if err != nil {
 		util.LogError(err, "Failed to get file", fc.app)
@@ -33,13 +34,12 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 		return
 	}
 	contentType := file.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "image/") {
+	if !strings.Contains(contentType, "image/") && !strings.Contains(contentType, "video/") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Only image files are allowed"})
 		return
 	}
 
 	urlName := c.Query("urlName")
-	fileService := fileService.NewFileService(fc.app)
 	customUrl, err := fileService.GenerateCustomUrl(urlName)
 	if err != nil {
 		util.LogError(err, "Failed to generate custom URL", fc.app)
@@ -81,11 +81,12 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 		"message":   "File upload started",
 		"path":      fileRecord.Path,
 		"status":    types.Pending,
+		"customUrl": customUrl,
 		"statusUrl": fmt.Sprintf("/api/file/status?customUrl=%s", customUrl),
 	})
 }
 
-func (fc *FileController) GetFileByHash(c *gin.Context) {
+func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 	customUrl := c.Param("customUrl")
 	if customUrl == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Custom URL parameter is required"})

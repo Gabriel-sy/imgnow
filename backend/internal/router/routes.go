@@ -13,7 +13,7 @@ func SetupRoutes(app *app.Application) *gin.Engine {
 	fileController := controller.NewFileController(app)
 	r.POST("/api/file/upload", fileController.UploadFile)
 	r.GET("/api/file/status", fileController.GetFileStatus)
-	r.GET("/:customUrl", fileController.GetFileByHash)
+	r.GET("/:customUrl", fileController.GetFileByCustomUrl)
 
 	return r
 }

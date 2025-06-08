@@ -10,6 +10,11 @@ const (
 	Error   FileStatus = "error"
 )
 
+type VideoMessage struct {
+	Filename string `json:"filename"`
+	Content  []byte `json:"content"`
+}
+
 type File struct {
 	Id           int
 	CustomUrl    string

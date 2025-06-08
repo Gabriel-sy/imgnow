@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -31,16 +31,21 @@ func main() {
 
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	l.logError(err, "Failed to connect to RabbitMQ")
-
+	if err != nil {
+		return
+	}
 	defer conn.Close()
 
 	ch, err := conn.Channel()
 	l.logError(err, "Failed to open a channel")
+	if err != nil {
+		return
+	}
 	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
 		"video_compress_queue",
-		false,
+		true,
 		false,
 		false,
 		false,
@@ -51,7 +56,7 @@ func main() {
 	msgs, err := ch.Consume(
 		q.Name,
 		"",
-		true,
+		false,
 		false,
 		false,
 		false,
@@ -66,15 +71,12 @@ func main() {
 			var videoMsg VideoMessage
 			if err := json.Unmarshal(d.Body, &videoMsg); err != nil {
 				l.logger.Printf("Error parsing JSON: %v", err)
+				d.Ack(false)
 				continue
 			}
 
-			pr, pw := io.Pipe()
-
-			go func() {
-				defer pw.Close()
-				pw.Write(videoMsg.Content)
-			}()
+			var outputBuf bytes.Buffer
+			var errBuf bytes.Buffer
 
 			cmd := exec.Command("ffmpeg",
 				"-i", "pipe:0",
@@ -84,35 +86,55 @@ func main() {
 				"-tag:v", "hvc1",
 				"-c:a", "aac",
 				"-b:a", "128k",
+				"-f", "mp4",
+				"-movflags", "+frag_keyframe+empty_moov",
 				"pipe:1",
 			)
 
-			cmd.Stdin = pr
-			cmd.Stdout = pw
+			cmd.Stdin = bytes.NewReader(videoMsg.Content)
+			cmd.Stdout = &outputBuf
+			cmd.Stderr = &errBuf
 
-			output, err := cmd.CombinedOutput()
+			err := cmd.Run()
 			if err != nil {
-				l.logger.Fatalf("Error executing FFmpeg: %s\n%s", err, output)
+				l.logger.Printf("Error executing FFmpeg: %v", err)
+				l.logger.Printf("FFmpeg stderr: %s", errBuf.String())
+				d.Ack(false)
+				continue
 			}
+
 			l.logger.Printf("Video compressed successfully\n")
 
-			var returnMessage VideoMessage
-			returnMessage.Filename = videoMsg.Filename
-			returnMessage.Content = output
+			returnMessage := VideoMessage{
+				Filename: videoMsg.Filename,
+				Content:  outputBuf.Bytes(),
+			}
 
 			returnMessageBytes, err := json.Marshal(returnMessage)
 			if err != nil {
 				l.logger.Printf("Error marshalling return message: %v", err)
+				d.Ack(false)
 				continue
 			}
 
-			ch.PublishWithContext(context.TODO(),
+			err = ch.PublishWithContext(context.TODO(),
 				"",
 				"video_queue",
 				false,
 				false,
-				amqp.Publishing{Body: returnMessageBytes},
+				amqp.Publishing{
+					Body:         returnMessageBytes,
+					ContentType:  "application/json",
+					DeliveryMode: amqp.Persistent,
+				},
 			)
+			if err != nil {
+				l.logger.Printf("Error publishing return message: %v", err)
+				d.Ack(false)
+				continue
+			}
+
+			d.Ack(false)
 		}
 	}()
 
