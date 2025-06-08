@@ -19,7 +19,7 @@ type VideoMessage struct {
 type File struct {
 	Id           int
 	CustomUrl    string
-	Path         string
+	Path         *string
 	OriginalName string
 	Size         int
 	Type         string

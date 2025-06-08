@@ -215,9 +215,6 @@ func worker(id int, l *logger, cfg Config, ch *amqp.Channel, deliveries <-chan a
 	}
 }
 
-// Params:
-// videoContent: The video content
-// cfg: The .env configuration
 func runFFmpeg(videoContent []byte, cfg Config) ([]byte, error) {
 	var outputBuf bytes.Buffer
 	var errBuf bytes.Buffer

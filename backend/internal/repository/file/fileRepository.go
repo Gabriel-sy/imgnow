@@ -29,7 +29,7 @@ func FindFileByCustomUrl(app *app.Application, customUrl string) (*types.File, e
 }
 
 func CreateFile(app *app.Application, file *types.File) error {
-	query := `INSERT INTO file (custom_url, path, original_name, size, type, created_at, status) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	query := `INSERT INTO file (custom_url, original_name, size, type, created_at, status) VALUES ($1, $2, $3, $4, $5, $6)`
 
 	tx, err := app.DB.Begin()
 	if err != nil {
@@ -37,7 +37,7 @@ func CreateFile(app *app.Application, file *types.File) error {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec(query, file.CustomUrl, file.Path, file.OriginalName, file.Size, file.Type, file.CreatedAt, file.Status)
+	_, err = tx.Exec(query, file.CustomUrl, file.OriginalName, file.Size, file.Type, file.CreatedAt, file.Status)
 	if err != nil {
 		return err
 	}
@@ -62,6 +62,27 @@ func UpdateFileStatus(app *app.Application, customUrl string, status types.FileS
 
 	_, err := app.DB.Exec(query, status, customUrl)
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func UpdateFilePath(app *app.Application, customUrl string, path string) error {
+	query := `UPDATE file SET path = $1 WHERE custom_url = $2`
+
+	tx, err := app.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(query, path, customUrl)
+	if err != nil {
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
 		return err
 	}
 

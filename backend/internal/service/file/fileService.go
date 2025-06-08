@@ -14,7 +14,6 @@ import (
 	"image/png"
 	"io"
 	"mime/multipart"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -75,7 +74,7 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 		return aws.Endpoint{
-			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", os.Getenv("R2_ACCOUNT_ID")),
+			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", util.GetEnv("R2_ACCOUNT_ID", fs.app)),
 		}, nil
 	})
 
@@ -85,8 +84,8 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 		config.WithCredentialsProvider(aws.NewCredentialsCache(aws.CredentialsProviderFunc(
 			func(ctx context.Context) (aws.Credentials, error) {
 				return aws.Credentials{
-					AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
-					SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY"),
+					AccessKeyID:     util.GetEnv("R2_ACCESS_KEY_ID", fs.app),
+					SecretAccessKey: util.GetEnv("R2_SECRET_ACCESS_KEY", fs.app),
 				}, nil
 			},
 		))),
@@ -97,17 +96,13 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 
 	client := s3.NewFromConfig(cfg)
 
-	util.LogInfo(fmt.Sprintf("Placing file in bucket: %s", customUrl), fs.app)
-
 	_, err = client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket:        aws.String(os.Getenv("R2_BUCKET_NAME")),
+		Bucket:        aws.String(util.GetEnv("R2_BUCKET_NAME", fs.app)),
 		Key:           aws.String(customUrl),
 		Body:          body,
 		ContentType:   aws.String(contentType),
 		ContentLength: aws.Int64(contentLength),
 	})
-
-	util.LogInfo(fmt.Sprintf("File uploaded to R2: %s", customUrl), fs.app)
 
 	return err
 }
@@ -115,7 +110,7 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 func (fs *FileService) GetFromR2(customUrl string) (string, error) {
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 		return aws.Endpoint{
-			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", os.Getenv("R2_ACCOUNT_ID")),
+			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", util.GetEnv("R2_ACCOUNT_ID", fs.app)),
 		}, nil
 	})
 
@@ -125,8 +120,8 @@ func (fs *FileService) GetFromR2(customUrl string) (string, error) {
 		config.WithCredentialsProvider(aws.NewCredentialsCache(aws.CredentialsProviderFunc(
 			func(ctx context.Context) (aws.Credentials, error) {
 				return aws.Credentials{
-					AccessKeyID:     os.Getenv("R2_ACCESS_KEY_ID"),
-					SecretAccessKey: os.Getenv("R2_SECRET_ACCESS_KEY"),
+					AccessKeyID:     util.GetEnv("R2_ACCESS_KEY_ID", fs.app),
+					SecretAccessKey: util.GetEnv("R2_SECRET_ACCESS_KEY", fs.app),
 				}, nil
 			},
 		))),
@@ -139,7 +134,7 @@ func (fs *FileService) GetFromR2(customUrl string) (string, error) {
 
 	presignClient := s3.NewPresignClient(client)
 	presignedUrl, err := presignClient.PresignGetObject(context.TODO(), &s3.GetObjectInput{
-		Bucket: aws.String(os.Getenv("R2_BUCKET_NAME")),
+		Bucket: aws.String(util.GetEnv("R2_BUCKET_NAME", fs.app)),
 		Key:    aws.String(customUrl),
 	})
 	if err != nil {
@@ -147,6 +142,20 @@ func (fs *FileService) GetFromR2(customUrl string) (string, error) {
 	}
 
 	return presignedUrl.URL, nil
+}
+
+func (fs *FileService) UpdateFilePath(customUrl string) error {
+	fileUrl, err := fs.GetFromR2(customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to get file from R2", fs.app)
+		return err
+	}
+	err = fileRepo.UpdateFilePath(fs.app, customUrl, fileUrl)
+	if err != nil {
+		util.LogError(err, "Failed to update file path", fs.app)
+		return err
+	}
+	return nil
 }
 
 func (fs *FileService) GenerateCustomUrl(urlName string) (string, error) {
@@ -295,11 +304,11 @@ func (fs *FileService) handleVideoCompression(file *multipart.FileHeader) (io.Re
 func (fs *FileService) setupResponseQueue(requestID string) (*amqp.Queue, error) {
 	responseQueue, err := fs.amqpChannel.QueueDeclare(
 		"video_queue"+requestID, // unique queue name
-		true,                     // durable
-		true,                     // delete when unused
-		false,                    // exclusive
-		false,                    // no-wait
-		nil,                      // arguments
+		true,                    // durable
+		true,                    // delete when unused
+		false,                   // exclusive
+		false,                   // no-wait
+		nil,                     // arguments
 	)
 	if err != nil {
 		util.LogError(err, "Failed to declare response queue", fs.app)
@@ -356,7 +365,6 @@ func (fs *FileService) waitForCompressedVideo(ctx context.Context, msgs <-chan a
 			}
 
 			if response.RequestID == requestID {
-				util.LogInfo(fmt.Sprintf("Received compressed video for request: %s", requestID), fs.app)
 				return bytes.NewReader(response.Content), int64(len(response.Content)), nil
 			}
 		case <-ctx.Done():

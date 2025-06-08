@@ -47,10 +47,8 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 		return
 	}
 
-	websiteName := util.GetEnv("WEBSITE_URL", fc.app)
 	fileRecord := &types.File{
 		CustomUrl:    customUrl,
-		Path:         fmt.Sprintf("%s/%s", websiteName, customUrl),
 		OriginalName: strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename)),
 		Size:         int(file.Size),
 		Type:         file.Header.Get("Content-Type"),
@@ -75,11 +73,11 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 		}
 		fileRecord.Status = types.Active
 		fileRepo.UpdateFileStatus(fc.app, customUrl, types.Active)
+		fileService.UpdateFilePath(customUrl)
 	}()
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":   "File upload started",
-		"path":      fileRecord.Path,
 		"status":    types.Pending,
 		"customUrl": customUrl,
 		"statusUrl": fmt.Sprintf("/api/file/status?customUrl=%s", customUrl),
@@ -102,6 +100,13 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 
 	if file == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File not found"})
+		return
+	}
+
+	if file.Path != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"path": *file.Path,
+		})
 		return
 	}
 
@@ -139,6 +144,5 @@ func (fc *FileController) GetFileStatus(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": file.Status,
-		"path":   file.Path,
 	})
 }
