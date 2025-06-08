@@ -9,3 +9,7 @@ func LogError(err error, message string, app *app.Application) {
 		app.Logger.Println(message, err)
 	}
 }
+
+func LogInfo(message string, app *app.Application) {
+	app.Logger.Println(message)
+}
