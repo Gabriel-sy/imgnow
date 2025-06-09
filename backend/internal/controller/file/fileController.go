@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"gabrielsy/imgnow/internal/app"
 	fileRepo "gabrielsy/imgnow/internal/repository/file"
-	fileService "gabrielsy/imgnow/internal/service/file"
+	service "gabrielsy/imgnow/internal/service"
 	"gabrielsy/imgnow/internal/types"
 	"gabrielsy/imgnow/internal/util"
 	"net/http"
@@ -26,7 +26,7 @@ func NewFileController(app *app.Application) *FileController {
 }
 
 func (fc *FileController) UploadFile(c *gin.Context) {
-	fileService := fileService.NewFileService(fc.app)
+	fileService := service.NewFileService(fc.app)
 	file, err := c.FormFile("file")
 	if err != nil {
 		util.LogError(err, "Failed to get file", fc.app)
@@ -65,7 +65,7 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 
 	// Upload async, update file status and path after upload
 	go func() {
-		err = fileService.UploadToR2(file, customUrl)
+		err = fileService.UploadFile(file, customUrl)
 		if err != nil {
 			util.LogError(err, "Failed to upload file to R2", fc.app)
 			fileRecord.Status = types.Error
@@ -104,7 +104,7 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 		return
 	}
 
-	fileService := fileService.NewFileService(fc.app)
+	fileService := service.NewFileService(fc.app)
 
 	if file.ExpiresIn != nil && file.ExpiresIn.Before(time.Now()) {
 		err = fileService.DeleteFile(customUrl)
@@ -136,7 +136,8 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 
 	// Used as a fallback only
 	util.LogError(nil, fmt.Sprintf("Getting file from R2 as fallback, something went very wrong %s", customUrl), fc.app)
-	fileUrl, err := fileService.GetFromR2(customUrl)
+	r2 := service.NewR2Service(fc.app)
+	fileUrl, err := r2.GetFromR2(customUrl)
 	if err != nil {
 		util.LogError(err, "Failed to get file from R2", fc.app)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
@@ -192,7 +193,7 @@ func (fc *FileController) UpdateFileSettings(c *gin.Context) {
 		return
 	}
 
-	fileService := fileService.NewFileService(fc.app)
+	fileService := service.NewFileService(fc.app)
 
 	// Update expiration if provided
 	if request.ExpiresIn != nil {
@@ -230,7 +231,7 @@ func (fc *FileController) TrackVisualization(c *gin.Context) {
 		return
 	}
 
-	fileService := fileService.NewFileService(fc.app)
+	fileService := service.NewFileService(fc.app)
 	err := fileService.TrackFileSettings(customUrl)
 	if err != nil {
 		util.LogError(err, "Failed to track file visualization", fc.app)
@@ -242,7 +243,7 @@ func (fc *FileController) TrackVisualization(c *gin.Context) {
 }
 
 func (fc *FileController) CleanupExpiredFiles(c *gin.Context) {
-	fileService := fileService.NewFileService(fc.app)
+	fileService := service.NewFileService(fc.app)
 	err := fileService.CleanupExpiredFiles()
 	if err != nil {
 		util.LogError(err, "Failed to cleanup expired files", fc.app)
@@ -260,7 +261,7 @@ func (fc *FileController) AddDownload(c *gin.Context) {
 		return
 	}
 
-	fileService := fileService.NewFileService(fc.app)
+	fileService := service.NewFileService(fc.app)
 	err := fileService.TrackFileDownload(customUrl)
 	if err != nil {
 		util.LogError(err, "Failed to track file download", fc.app)
