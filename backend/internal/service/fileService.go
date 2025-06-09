@@ -20,6 +20,14 @@ func NewFileService(app *app.Application) *FileService {
 	return &FileService{app: app}
 }
 
+func (fs *FileService) GetFileInfo(customUrl string) (*types.File, error) {
+	file, err := fileRepo.FindFileByCustomUrl(fs.app, customUrl)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
 func (fs *FileService) UploadFile(file *multipart.FileHeader, customUrl string) error {
 	src, err := file.Open()
 	if err != nil {

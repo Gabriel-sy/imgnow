@@ -181,7 +181,7 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 }
 
 func (fc *FileController) GetFileStatus(c *gin.Context) {
-	customUrl := c.Query("customUrl")
+	customUrl := c.Param("customUrl")
 	if customUrl == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Custom URL parameter is required"})
 		return
@@ -275,4 +275,32 @@ func (fc *FileController) AddDownload(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Download added successfully"})
+}
+
+func (fc *FileController) GetFileInfo(c *gin.Context) {
+	customUrl := c.Param("customUrl")
+	if customUrl == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Custom URL parameter is required"})
+		return
+	}
+
+	fileService := service.NewFileService(fc.app)
+	file, err := fileService.GetFileInfo(customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to get file info", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get file info"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"customUrl":    file.CustomUrl,
+		"originalName": file.OriginalName,
+		"size":         file.Size,
+		"type":         file.Type,
+		"createdAt":    file.CreatedAt,
+		"status":       file.Status,
+		"path":         file.Path,
+		"expiresIn":    file.ExpiresIn,
+		"deletedAt":    file.DeletedAt,
+	})
 }
