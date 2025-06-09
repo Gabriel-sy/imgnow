@@ -63,6 +63,7 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 		return
 	}
 
+	// Upload async, update file status and path after upload
 	go func() {
 		err = fileService.UploadToR2(file, customUrl)
 		if err != nil {
@@ -103,6 +104,27 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 		return
 	}
 
+	fileService := fileService.NewFileService(fc.app)
+
+	if file.ExpiresIn != nil && file.ExpiresIn.Before(time.Now()) {
+		err = fileService.DeleteFile(customUrl)
+		if err != nil {
+			util.LogError(err, "Failed to delete expired file", fc.app)
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "File has expired"})
+		return
+	}
+
+	if file.DeletedAt != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "File has been deleted"})
+		return
+	}
+
+	err = fileService.TrackFileSettings(customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to track file visualization", fc.app)
+	}
+
 	if file.Path != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"path": *file.Path,
@@ -110,7 +132,8 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 		return
 	}
 
-	fileService := fileService.NewFileService(fc.app)
+	// Used as a fallback only
+	util.LogError(nil, fmt.Sprintf("Getting file from R2 as fallback, something went very wrong %s", customUrl), fc.app)
 	fileUrl, err := fileService.GetFromR2(customUrl)
 	if err != nil {
 		util.LogError(err, "Failed to get file from R2", fc.app)
@@ -145,4 +168,103 @@ func (fc *FileController) GetFileStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": file.Status,
 	})
+}
+
+func (fc *FileController) UpdateFileSettings(c *gin.Context) {
+	customUrl := c.Param("customUrl")
+	if customUrl == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Custom URL parameter is required"})
+		return
+	}
+
+	var request struct {
+		ExpiresIn                  *time.Time `json:"expiresIn"`
+		DeletesAfterDownload       bool       `json:"deletesAfterDownload"`
+		DownloadsForDeletion       *int       `json:"downloadsForDeletion"`
+		DeletesAfterVizualizations bool       `json:"deletesAfterVizualizations"`
+		VizualizationsForDeletion  *int       `json:"vizualizationsForDeletion"`
+	}
+
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fileService := fileService.NewFileService(fc.app)
+
+	// Update expiration if provided
+	if request.ExpiresIn != nil {
+		err := fileService.UpdateFileExpiration(customUrl, request.ExpiresIn)
+		if err != nil {
+			util.LogError(err, "Failed to update file expiration", fc.app)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update file expiration"})
+			return
+		}
+	}
+
+	// Update deletion settings if any are provided
+	if request.DeletesAfterDownload || request.DeletesAfterVizualizations {
+		err := fileService.UpdateDeletionSettings(
+			customUrl,
+			request.DeletesAfterDownload,
+			request.DownloadsForDeletion,
+			request.DeletesAfterVizualizations,
+			request.VizualizationsForDeletion,
+		)
+		if err != nil {
+			util.LogError(err, "Failed to update deletion settings", fc.app)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update deletion settings"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "File settings updated successfully"})
+}
+
+func (fc *FileController) TrackVisualization(c *gin.Context) {
+	customUrl := c.Param("customUrl")
+	if customUrl == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Custom URL parameter is required"})
+		return
+	}
+
+	fileService := fileService.NewFileService(fc.app)
+	err := fileService.TrackFileSettings(customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to track file visualization", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to track file visualization"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Visualization tracked successfully"})
+}
+
+func (fc *FileController) CleanupExpiredFiles(c *gin.Context) {
+	fileService := fileService.NewFileService(fc.app)
+	err := fileService.CleanupExpiredFiles()
+	if err != nil {
+		util.LogError(err, "Failed to cleanup expired files", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cleanup expired files"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Expired files cleanup completed"})
+}
+
+func (fc *FileController) AddDownload(c *gin.Context) {
+	customUrl := c.Param("customUrl")
+	if customUrl == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Custom URL parameter is required"})
+		return
+	}
+
+	fileService := fileService.NewFileService(fc.app)
+	err := fileService.TrackFileDownload(customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to track file download", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to track file download"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Download added successfully"})
 }

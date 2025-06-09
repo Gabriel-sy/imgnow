@@ -107,6 +107,33 @@ func (fs *FileService) UploadToR2(file *multipart.FileHeader, customUrl string) 
 	return err
 }
 
+func (fs *FileService) TrackFileDownload(customUrl string) error {
+	err := fileRepo.IncrementDownloads(fs.app, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to track file download", fs.app)
+		return err
+	}
+
+	// Check if file should be deleted based on download count
+	file, err := fileRepo.GetFileDeletionInfo(fs.app, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to get file deletion info", fs.app)
+		return err
+	}
+
+	if file != nil && file.DeletesAfterDownload && file.DownloadsForDeletion != nil {
+		if file.Downloads >= *file.DownloadsForDeletion {
+			err = fs.DeleteFile(customUrl)
+			if err != nil {
+				util.LogError(err, "Failed to delete file after download limit", fs.app)
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (fs *FileService) GetFromR2(customUrl string) (string, error) {
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 		return aws.Endpoint{
@@ -372,4 +399,132 @@ func (fs *FileService) waitForCompressedVideo(ctx context.Context, msgs <-chan a
 			return nil, 0, fmt.Errorf("timeout waiting for video compression response")
 		}
 	}
+}
+
+func (fs *FileService) UpdateFileExpiration(customUrl string, expiresIn *time.Time) error {
+	err := fileRepo.UpdateExpirationSettings(fs.app, customUrl, expiresIn)
+	if err != nil {
+		util.LogError(err, "Failed to update file expiration", fs.app)
+		return err
+	}
+	return nil
+}
+
+func (fs *FileService) UpdateDeletionSettings(customUrl string, deletesAfterDownload bool, downloadsForDeletion *int, deletesAfterVizualizations bool, vizualizationsForDeletion *int) error {
+	err := fileRepo.UpdateDeletionDownloadSettings(fs.app, customUrl, deletesAfterDownload, downloadsForDeletion)
+	if err != nil {
+		util.LogError(err, "Failed to update download deletion settings", fs.app)
+		return err
+	}
+
+	err = fileRepo.UpdateDeletionVizualizationSettings(fs.app, customUrl, deletesAfterVizualizations, vizualizationsForDeletion)
+	if err != nil {
+		util.LogError(err, "Failed to update visualization deletion settings", fs.app)
+		return err
+	}
+
+	return nil
+}
+
+func (fs *FileService) TrackFileSettings(customUrl string) error {
+	err := fileRepo.IncrementVizualizations(fs.app, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to track file visualization", fs.app)
+		return err
+	}
+
+	// Check if file should be deleted based on visualization count
+	file, err := fileRepo.GetFileDeletionInfo(fs.app, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to get file deletion info", fs.app)
+		return err
+	}
+
+	if file != nil && file.DeletesAfterDownload && file.DownloadsForDeletion != nil {
+		if file.Downloads >= *file.DownloadsForDeletion {
+			err = fs.DeleteFile(customUrl)
+			if err != nil {
+				util.LogError(err, "Failed to delete file after download limit", fs.app)
+				return err
+			}
+		}
+	}
+
+	if file != nil && file.DeletesAfterVizualizations && file.VizualizationsForDeletion != nil {
+		if file.Vizualizations >= *file.VizualizationsForDeletion {
+			err = fs.DeleteFile(customUrl)
+			if err != nil {
+				util.LogError(err, "Failed to delete file after visualization limit", fs.app)
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (fs *FileService) CleanupExpiredFiles() error {
+	expiredFiles, err := fileRepo.GetExpiredFiles(fs.app)
+	if err != nil {
+		util.LogError(err, "Failed to get expired files", fs.app)
+		return err
+	}
+
+	for _, file := range expiredFiles {
+		err = fs.DeleteFile(file.CustomUrl)
+		if err != nil {
+			util.LogError(err, "Failed to delete expired file", fs.app)
+			continue
+		}
+	}
+
+	return nil
+}
+
+func (fs *FileService) DeleteFromR2(customUrl string) error {
+	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		return aws.Endpoint{
+			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", util.GetEnv("R2_ACCOUNT_ID", fs.app)),
+		}, nil
+	})
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithEndpointResolverWithOptions(customResolver),
+		config.WithRegion("auto"),
+		config.WithCredentialsProvider(aws.NewCredentialsCache(aws.CredentialsProviderFunc(
+			func(ctx context.Context) (aws.Credentials, error) {
+				return aws.Credentials{
+					AccessKeyID:     util.GetEnv("R2_ACCESS_KEY_ID", fs.app),
+					SecretAccessKey: util.GetEnv("R2_SECRET_ACCESS_KEY", fs.app),
+				}, nil
+			},
+		))),
+	)
+	if err != nil {
+		return err
+	}
+
+	client := s3.NewFromConfig(cfg)
+
+	_, err = client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
+		Bucket: aws.String(util.GetEnv("R2_BUCKET_NAME", fs.app)),
+		Key:    aws.String(customUrl),
+	})
+
+	return err
+}
+
+func (fs *FileService) DeleteFile(customUrl string) error {
+	err := fs.DeleteFromR2(customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to delete file from R2", fs.app)
+	}
+
+	err = fileRepo.MarkFileAsDeleted(fs.app, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to mark file as deleted", fs.app)
+		return err
+	}
+
+	return nil
 }

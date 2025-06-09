@@ -17,12 +17,21 @@ type VideoMessage struct {
 }
 
 type File struct {
-	Id           int
-	CustomUrl    string
-	Path         *string
-	OriginalName string
-	Size         int
-	Type         string
-	CreatedAt    time.Time
-	Status       FileStatus
+	Id                         int
+	CustomUrl                  string
+	Path                       *string
+	OriginalName               string
+	Size                       int
+	Type                       string
+	CreatedAt                  time.Time
+	Status                     FileStatus
+	Vizualizations             int
+	Downloads                  int
+	DeletesAfterDownload       bool
+	DeletedAt                  *time.Time
+	DownloadsForDeletion       *int
+	DeletesAfterVizualizations bool
+	VizualizationsForDeletion  *int
+	LastVizualization          *time.Time
+	ExpiresIn                  *time.Time
 }
