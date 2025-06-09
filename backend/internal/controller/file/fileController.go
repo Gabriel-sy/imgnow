@@ -104,9 +104,9 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 		return
 	}
 
-	fileService := service.NewFileService(fc.app)
-
+	// Check if file has expired
 	if file.ExpiresIn != nil && file.ExpiresIn.Before(time.Now()) {
+		fileService := service.NewFileService(fc.app)
 		err = fileService.DeleteFile(customUrl)
 		if err != nil {
 			util.LogError(err, "Failed to delete expired file", fc.app)
@@ -115,10 +115,41 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 		return
 	}
 
+	// Check if file has been deleted
 	if file.DeletedAt != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "File has been deleted"})
 		return
 	}
+
+	// Check if file requires password
+	hashedPassword, err := fileRepo.GetFilePassword(fc.app, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to get file password", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify password"})
+		return
+	}
+
+	// If file has password but no password was provided in request
+	if hashedPassword != nil {
+		var requestBody struct {
+			Password string `json:"password"`
+		}
+
+		if err := c.ShouldBindJSON(&requestBody); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":            "Password required",
+				"requiresPassword": true,
+			})
+			return
+		}
+
+		if !util.CheckPasswordHash(requestBody.Password, *hashedPassword) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid password"})
+			return
+		}
+	}
+
+	fileService := service.NewFileService(fc.app)
 
 	err = fileService.TrackFileSettings(customUrl)
 	if err != nil {
@@ -180,13 +211,7 @@ func (fc *FileController) UpdateFileSettings(c *gin.Context) {
 		return
 	}
 
-	var request struct {
-		ExpiresIn                  *time.Time `json:"expiresIn"`
-		DeletesAfterDownload       bool       `json:"deletesAfterDownload"`
-		DownloadsForDeletion       *int       `json:"downloadsForDeletion"`
-		DeletesAfterVizualizations bool       `json:"deletesAfterVizualizations"`
-		VizualizationsForDeletion  *int       `json:"vizualizationsForDeletion"`
-	}
+	var request types.FileSettings
 
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -194,31 +219,11 @@ func (fc *FileController) UpdateFileSettings(c *gin.Context) {
 	}
 
 	fileService := service.NewFileService(fc.app)
-
-	// Update expiration if provided
-	if request.ExpiresIn != nil {
-		err := fileService.UpdateFileExpiration(customUrl, request.ExpiresIn)
-		if err != nil {
-			util.LogError(err, "Failed to update file expiration", fc.app)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update file expiration"})
-			return
-		}
-	}
-
-	// Update deletion settings if any are provided
-	if request.DeletesAfterDownload || request.DeletesAfterVizualizations {
-		err := fileService.UpdateDeletionSettings(
-			customUrl,
-			request.DeletesAfterDownload,
-			request.DownloadsForDeletion,
-			request.DeletesAfterVizualizations,
-			request.VizualizationsForDeletion,
-		)
-		if err != nil {
-			util.LogError(err, "Failed to update deletion settings", fc.app)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update deletion settings"})
-			return
-		}
+	err := fileService.HandleConfiguration(request, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to handle file configuration", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to handle file configuration"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "File settings updated successfully"})

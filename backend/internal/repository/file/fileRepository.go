@@ -3,6 +3,7 @@ package repository
 import (
 	"gabrielsy/imgnow/internal/app"
 	"gabrielsy/imgnow/internal/types"
+	"gabrielsy/imgnow/internal/util"
 	"time"
 )
 
@@ -239,4 +240,28 @@ func IncrementDownloads(app *app.Application, customUrl string) error {
 
 	_, err := app.DB.Exec(query, customUrl)
 	return err
+}
+
+func UpdatePassword(app *app.Application, customUrl string, password string) error {
+	hashedPassword, err := util.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	query := `UPDATE file 
+		SET password = $1
+		WHERE custom_url = $2`
+
+	_, err = app.DB.Exec(query, hashedPassword, customUrl)
+	return err
+}
+
+func GetFilePassword(app *app.Application, customUrl string) (*string, error) {
+	query := `SELECT password FROM file WHERE custom_url = $1`
+
+	var hashedPassword string
+	err := app.DB.QueryRow(query, customUrl).Scan(&hashedPassword)
+	if err != nil {
+		return nil, err
+	}
+	return &hashedPassword, nil
 }

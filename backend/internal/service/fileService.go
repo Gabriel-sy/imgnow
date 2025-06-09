@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"gabrielsy/imgnow/internal/app"
 	fileRepo "gabrielsy/imgnow/internal/repository/file"
+	"gabrielsy/imgnow/internal/types"
 	"gabrielsy/imgnow/internal/util"
 	"io"
 	"mime/multipart"
@@ -217,4 +218,59 @@ func (fs *FileService) DeleteFile(customUrl string) error {
 	}
 
 	return nil
+}
+
+func (fs *FileService) HandleConfiguration(request types.FileSettings, customUrl string) error {
+	// Update expiration if provided
+	if request.ExpiresIn != nil {
+		err := fs.UpdateFileExpiration(customUrl, request.ExpiresIn)
+		if err != nil {
+			util.LogError(err, "Failed to update file expiration", fs.app)
+			return err
+		}
+	}
+
+	// Update deletion settings if any are provided
+	if request.DeletesAfterDownload || request.DeletesAfterVizualizations {
+		err := fs.UpdateDeletionSettings(
+			customUrl,
+			request.DeletesAfterDownload,
+			request.DownloadsForDeletion,
+			request.DeletesAfterVizualizations,
+			request.VizualizationsForDeletion,
+		)
+		if err != nil {
+			util.LogError(err, "Failed to update deletion settings", fs.app)
+			return err
+		}
+	}
+
+	// Update password if provided
+	if request.Password != nil {
+		err := fs.UpdatePassword(customUrl, *request.Password)
+		if err != nil {
+			util.LogError(err, "Failed to update password", fs.app)
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (fs *FileService) UpdatePassword(customUrl string, password string) error {
+	err := fileRepo.UpdatePassword(fs.app, customUrl, password)
+	if err != nil {
+		util.LogError(err, "Failed to update password", fs.app)
+		return err
+	}
+	return nil
+}
+
+func (fs *FileService) VerifyPassword(customUrl string, password string) (bool, error) {
+	hashedPassword, err := fileRepo.GetFilePassword(fs.app, customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to get file password", fs.app)
+		return false, err
+	}
+	return util.CheckPasswordHash(password, *hashedPassword), nil
 }
