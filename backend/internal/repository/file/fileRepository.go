@@ -19,7 +19,25 @@ func FindFileByCustomUrl(app *app.Application, customUrl string) (*types.File, e
 
 	for rows.Next() {
 		var file types.File
-		err := rows.Scan(&file.Id, &file.CustomUrl, &file.Path, &file.OriginalName, &file.Size, &file.Type, &file.CreatedAt, &file.Status)
+		err := rows.Scan(
+			&file.Id,
+			&file.CustomUrl,
+			&file.Path,
+			&file.OriginalName,
+			&file.Size,
+			&file.Type,
+			&file.CreatedAt,
+			&file.Status,
+			&file.Vizualizations,
+			&file.DeletesAfterDownload,
+			&file.DeletedAt,
+			&file.DownloadsForDeletion,
+			&file.DeletesAfterVizualizations,
+			&file.VizualizationsForDeletion,
+			&file.LastVizualization,
+			&file.ExpiresIn,
+			&file.Downloads,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +131,7 @@ func MarkFileAsDeleted(app *app.Application, customUrl string) error {
 func UpdateDeletionDownloadSettings(app *app.Application, customUrl string, deletesAfterDownload bool, downloadsForDeletion *int) error {
 	query := `UPDATE file 
 		SET deletes_after_download = $1,
-			downloads_for_deletion = $2,
+			downloads_for_deletion = $2
 		WHERE custom_url = $3`
 
 	_, err := app.DB.Exec(query, deletesAfterDownload, downloadsForDeletion, customUrl)
@@ -132,7 +150,7 @@ func UpdateDeletionVizualizationSettings(app *app.Application, customUrl string,
 
 func GetFileDeletionInfo(app *app.Application, customUrl string) (*types.File, error) {
 	query := `SELECT id, custom_url, vizualizations, deletes_after_download, downloads_for_deletion, 
-		deletes_after_vizualizations, vizualizations_for_deletion, deleted_at
+		deletes_after_vizualizations, vizualizations_for_deletion, deleted_at, downloads
 		FROM file WHERE custom_url = $1`
 
 	rows, err := app.DB.Query(query, customUrl)
@@ -152,6 +170,7 @@ func GetFileDeletionInfo(app *app.Application, customUrl string) (*types.File, e
 			&file.DeletesAfterVizualizations,
 			&file.VizualizationsForDeletion,
 			&file.DeletedAt,
+			&file.Downloads,
 		)
 		if err != nil {
 			return nil, err

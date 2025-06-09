@@ -123,6 +123,8 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 	err = fileService.TrackFileSettings(customUrl)
 	if err != nil {
 		util.LogError(err, "Failed to track file visualization", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to track file visualization"})
+		return
 	}
 
 	if file.Path != nil {

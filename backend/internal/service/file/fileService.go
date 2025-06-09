@@ -426,6 +426,7 @@ func (fs *FileService) UpdateDeletionSettings(customUrl string, deletesAfterDown
 	return nil
 }
 
+// Returns true if file is available, false if it's not
 func (fs *FileService) TrackFileSettings(customUrl string) error {
 	err := fileRepo.IncrementVizualizations(fs.app, customUrl)
 	if err != nil {
@@ -438,16 +439,6 @@ func (fs *FileService) TrackFileSettings(customUrl string) error {
 	if err != nil {
 		util.LogError(err, "Failed to get file deletion info", fs.app)
 		return err
-	}
-
-	if file != nil && file.DeletesAfterDownload && file.DownloadsForDeletion != nil {
-		if file.Downloads >= *file.DownloadsForDeletion {
-			err = fs.DeleteFile(customUrl)
-			if err != nil {
-				util.LogError(err, "Failed to delete file after download limit", fs.app)
-				return err
-			}
-		}
 	}
 
 	if file != nil && file.DeletesAfterVizualizations && file.VizualizationsForDeletion != nil {
