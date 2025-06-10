@@ -1,0 +1,46 @@
+/* You can add global styles to this file, and also import other style files */
+@import "@angular/material/prebuilt-themes/indigo-pink.css";
+
+::ng-deep .error-snackbar {
+  background: #f44336 !important;
+  color: white !important;
+}
+
+::ng-deep .success-snackbar {
+  background: #4caf50 !important;
+  color: white !important;
+}
+
+.mat-mdc-snack-bar-container {
+  --mdc-snackbar-container-color: transparent !important;
+  --mat-mdc-snack-bar-button-color: white !important;
+  --mdc-snackbar-supporting-text-color: white !important;
+}
+
+/* Dark datepicker theme overrides */
+.dark-datepicker .mat-mdc-calendar-body-cell-content {
+  color: white !important;
+}
+
+.dark-datepicker
+  .mat-mdc-calendar-body-cell:not(.mat-mdc-calendar-body-disabled):hover
+  .mat-mdc-calendar-body-cell-content {
+  background: rgba(179, 136, 255, 0.2) !important;
+}
+
+.dark-datepicker
+  .mat-mdc-calendar-body-selected
+  .mat-mdc-calendar-body-cell-content {
+  background-color: #b388ff !important;
+  color: #1a1a2e !important;
+}
+
+.dark-datepicker {
+  --mdc-theme-text-primary-on-background: white;
+  --mdc-theme-text-primary-on-surface: white;
+  --mat-datepicker-calendar-text-color: white;
+}
+
+.dark-datepicker .mdc-button__label {
+  color: white !important;
+}

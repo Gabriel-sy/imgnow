@@ -37,10 +37,10 @@ type File struct {
 }
 
 type FileSettings struct {
-	ExpiresIn                  *time.Time  `json:"expiresIn"`
+	ExpiresIn                  *time.Time `json:"expiresIn"`
 	DeletesAfterDownload       bool       `json:"deletesAfterDownload"`
 	DownloadsForDeletion       *int       `json:"downloadsForDeletion"`
 	DeletesAfterVizualizations bool       `json:"deletesAfterVizualizations"`
 	VizualizationsForDeletion  *int       `json:"vizualizationsForDeletion"`
-	Password                   *string     `json:"password"`
+	Password                   *string    `json:"password"`
 }

@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@angular/animations": "^20.0.2",
+    "@angular/cdk": "^20.0.2",
+    "@angular/material": "^20.0.2",
+    "@tsparticles/angular": "^3.0.0",
+    "@tsparticles/slim": "^3.8.1"
+  }
+}

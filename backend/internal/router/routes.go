@@ -4,11 +4,21 @@ import (
 	"gabrielsy/imgnow/internal/app"
 	controller "gabrielsy/imgnow/internal/controller/file"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func SetupRoutes(app *app.Application) *gin.Engine {
 	r := gin.Default()
+
+	// Configure CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:4200"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
 	fileController := controller.NewFileController(app)
 	r.POST("/api/file/upload", fileController.UploadFile)

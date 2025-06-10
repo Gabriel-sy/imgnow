@@ -1,0 +1,49 @@
+<div class="upload-dialog">
+  <h2 mat-dialog-title>Upload Media</h2>
+
+  <mat-dialog-content>
+    <div class="custom-input-container">
+      <input id="customUrl" type="text" [(ngModel)]="customUrl" placeholder=" " />
+      <label for="customUrl">Custom URL (optional)</label>
+      <p class="hint">If not provided, a 5-digit hash will be generated</p>
+    </div>
+
+    <div class="drop-zone" [class.dragging]="isDragging" (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)" (drop)="onDrop($event)">
+
+      <input type="file" #fileInput style="display: none" (change)="onFileSelected($event)"
+        accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm">
+
+      <div class="drop-zone-content" *ngIf="!selectedFile">
+        <span class="material-icons">cloud_upload</span>
+        <p>Drag and drop your file here</p>
+        <p>or</p>
+        <button mat-stroked-button (click)="fileInput.click()">
+          Browse Files
+        </button>
+        <p class="file-restrictions">Supported formats: JPEG, PNG, GIF, WEBP, MP4, WEBM (max 30MB)</p>
+      </div>
+
+      <div class="selected-file" *ngIf="selectedFile">
+        <span class="material-icons file-icon">insert_drive_file</span>
+        <div class="file-info">
+          <span class="file-name" [title]="selectedFile.name">{{ selectedFile.name }}</span>
+          <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
+        </div>
+        <button mat-icon-button (click)="selectedFile = null; errorMessage = ''">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+    </div>
+
+    <mat-progress-bar *ngIf="isUploading" mode="determinate" [value]="uploadProgress">
+    </mat-progress-bar>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="close()">Cancel</button>
+    <button mat-raised-button color="primary" [disabled]="!selectedFile || isUploading" (click)="uploadFile()">
+      Upload
+    </button>
+  </mat-dialog-actions>
+</div>

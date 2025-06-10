@@ -1,0 +1,237 @@
+.upload-dialog {
+  padding: 24px;
+  background: #1a1a2e;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+::ng-deep .mat-mdc-dialog-container {
+  overflow-x: hidden !important;
+}
+
+::ng-deep .cdk-overlay-pane {
+  max-width: 90vw !important;
+}
+
+::ng-deep .mat-mdc-dialog-content {
+  overflow: visible !important;
+  padding-top: 10px;
+}
+
+h2[mat-dialog-title] {
+  color: #b388ff !important;
+  margin-bottom: 24px !important;
+  font-size: 28px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.5px !important;
+  padding-right: 24px !important;
+}
+
+.custom-input-container {
+  position: relative;
+  margin-bottom: 32px;
+}
+
+.custom-input-container input {
+  background: transparent;
+  border: 1px solid rgba(179, 136, 255, 0.3);
+  border-radius: 8px;
+  color: white;
+  font-size: 16px;
+  padding: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.custom-input-container label {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+  transition: all 0.2s ease;
+  background-color: #1a1a2e;
+  padding: 0 4px;
+}
+
+.custom-input-container input:focus {
+  outline: none;
+  border-color: #b388ff;
+  border-width: 2px;
+  padding: 15px; /* Compensate for border width change */
+}
+
+.custom-input-container input:focus + label,
+.custom-input-container input:not(:placeholder-shown) + label {
+  top: -10px;
+  left: 12px;
+  font-size: 14px;
+  color: #b388ff;
+}
+
+.custom-input-container .hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 4px 16px 0;
+  margin: 0;
+}
+
+.drop-zone {
+  border: 2px dashed rgba(179, 136, 255, 0.3);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  transition: all 0.3s ease;
+  background: rgba(179, 136, 255, 0.05);
+  margin-bottom: 24px;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.drop-zone.dragging {
+  border-color: #b388ff;
+  background: rgba(179, 136, 255, 0.1);
+}
+
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.drop-zone-content .material-icons {
+  font-size: 48px !important;
+  width: 48px !important;
+  height: 48px !important;
+  color: #b388ff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.drop-zone-content p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.drop-zone-content .file-restrictions {
+  font-size: 14px !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  margin-top: 8px !important;
+}
+
+.drop-zone-content button[mat-stroked-button] {
+  color: #b388ff !important;
+  border-color: rgba(179, 136, 255, 0.5) !important;
+  transition: all 0.3s ease;
+}
+
+.drop-zone-content button[mat-stroked-button]:hover {
+  background-color: rgba(179, 136, 255, 0.1) !important;
+  border-color: #b388ff !important;
+}
+
+.selected-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(179, 136, 255, 0.1);
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.file-icon {
+  color: #b388ff !important;
+  font-size: 32px !important;
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-width: 0; /* Prevents text overflow issues in flexbox */
+}
+
+.file-name {
+  color: white;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.file-size {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+::ng-deep .selected-file .mat-mdc-icon-button {
+  color: white !important;
+}
+
+::ng-deep .selected-file .mat-mdc-icon-button:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+::ng-deep .mat-mdc-dialog-actions {
+  padding: 24px 0 0 !important;
+  margin: 0 !important;
+  gap: 12px !important;
+}
+
+::ng-deep .mdc-button {
+  height: 40px !important;
+  padding: 0 24px !important;
+  border-radius: 20px !important;
+}
+
+::ng-deep .mat-mdc-button {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+::ng-deep .mat-mdc-button:hover {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+::ng-deep .mat-mdc-raised-button.mat-primary {
+  background-color: #b388ff !important;
+  color: #1a1a2e !important;
+  font-weight: 500 !important;
+}
+
+::ng-deep .mat-mdc-raised-button.mat-primary:hover {
+  background-color: #9b6bff !important;
+}
+
+::ng-deep .mat-mdc-raised-button.mat-primary:disabled {
+  background-color: rgba(179, 136, 255, 0.3) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+::ng-deep .mat-mdc-progress-bar {
+  border-radius: 4px;
+  height: 6px !important;
+}
+
+::ng-deep .mdc-linear-progress__buffer {
+  background-color: rgba(179, 136, 255, 0.1) !important;
+}
+
+::ng-deep .mdc-linear-progress__bar-inner {
+  background-color: #b388ff !important;
+}
