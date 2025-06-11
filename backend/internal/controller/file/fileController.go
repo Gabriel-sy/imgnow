@@ -39,7 +39,7 @@ func (fc *FileController) UploadFile(c *gin.Context) {
 		return
 	}
 
-	urlName := c.Query("urlName")
+	urlName := c.Query("customUrl")
 	customUrl, err := fileService.GenerateCustomUrl(urlName)
 	if err != nil {
 		util.LogError(err, "Failed to generate custom URL", fc.app)
@@ -104,6 +104,11 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 		return
 	}
 
+	if file.Status == types.Pending {
+		c.JSON(http.StatusTooEarly, gin.H{"error": "File is still being processed"})
+		return
+	}
+
 	// Check if file has expired
 	if file.ExpiresIn != nil && file.ExpiresIn.Before(time.Now()) {
 		fileService := service.NewFileService(fc.app)
@@ -148,6 +153,24 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 			return
 		}
 	}
+	// To be used with permanent urls
+	/*
+
+		if file.Path != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"path": *file.Path,
+					})
+					return
+					}
+	*/
+
+	r2 := service.NewR2Service(fc.app)
+	fileUrl, err := r2.GetFromR2(customUrl)
+	if err != nil {
+		util.LogError(err, "Failed to get file from R2", fc.app)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
 
 	fileService := service.NewFileService(fc.app)
 
@@ -157,24 +180,6 @@ func (fc *FileController) GetFileByCustomUrl(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to track file visualization"})
 		return
 	}
-
-	if file.Path != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"path": *file.Path,
-		})
-		return
-	}
-
-	// Used as a fallback only
-	util.LogError(nil, fmt.Sprintf("Getting file from R2 as fallback, something went very wrong %s", customUrl), fc.app)
-	r2 := service.NewR2Service(fc.app)
-	fileUrl, err := r2.GetFromR2(customUrl)
-	if err != nil {
-		util.LogError(err, "Failed to get file from R2", fc.app)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"path": fileUrl,
 	})
@@ -293,14 +298,20 @@ func (fc *FileController) GetFileInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"customUrl":    file.CustomUrl,
-		"originalName": file.OriginalName,
-		"size":         file.Size,
-		"type":         file.Type,
-		"createdAt":    file.CreatedAt,
-		"status":       file.Status,
-		"path":         file.Path,
-		"expiresIn":    file.ExpiresIn,
-		"deletedAt":    file.DeletedAt,
+		"customUrl":                  file.CustomUrl,
+		"originalName":               file.OriginalName,
+		"size":                       file.Size,
+		"type":                       file.Type,
+		"createdAt":                  file.CreatedAt,
+		"status":                     file.Status,
+		"path":                       file.Path,
+		"expiresIn":                  file.ExpiresIn,
+		"deletedAt":                  file.DeletedAt,
+		"vizualizations":             file.Vizualizations,
+		"downloads":                  file.Downloads,
+		"deletesAfterDownload":       file.DeletesAfterDownload,
+		"downloadsForDeletion":       file.DownloadsForDeletion,
+		"deletesAfterVizualizations": file.DeletesAfterVizualizations,
+		"vizualizationsForDeletion":  file.VizualizationsForDeletion,
 	})
 }

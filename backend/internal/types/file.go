@@ -34,6 +34,7 @@ type File struct {
 	VizualizationsForDeletion  *int
 	LastVizualization          *time.Time
 	ExpiresIn                  *time.Time
+	Password 									 *string
 }
 
 type FileSettings struct {

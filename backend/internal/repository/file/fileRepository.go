@@ -38,6 +38,7 @@ func FindFileByCustomUrl(app *app.Application, customUrl string) (*types.File, e
 			&file.LastVizualization,
 			&file.ExpiresIn,
 			&file.Downloads,
+			&file.Password,
 		)
 		if err != nil {
 			return nil, err
@@ -242,7 +243,7 @@ func IncrementDownloads(app *app.Application, customUrl string) error {
 	return err
 }
 
-func UpdatePassword(app *app.Application, customUrl string, password string) error {
+func UpdatePassword(app *app.Application, customUrl string, password *string) error {
 	hashedPassword, err := util.HashPassword(password)
 	if err != nil {
 		return err
@@ -258,10 +259,10 @@ func UpdatePassword(app *app.Application, customUrl string, password string) err
 func GetFilePassword(app *app.Application, customUrl string) (*string, error) {
 	query := `SELECT password FROM file WHERE custom_url = $1`
 
-	var hashedPassword string
+	var hashedPassword *string
 	err := app.DB.QueryRow(query, customUrl).Scan(&hashedPassword)
 	if err != nil {
 		return nil, err
 	}
-	return &hashedPassword, nil
+	return hashedPassword, nil
 }

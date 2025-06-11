@@ -1,0 +1,72 @@
+<div class="space-background">
+  <div class="stars-container">
+    <div id="stars1"></div>
+    <div id="stars2"></div>
+    <div id="stars3"></div>
+  </div>
+  <div class="content">
+    <div class="file-view-container">
+      <div *ngIf="isLoading" class="loading-indicator">Loading file...</div>
+
+      <div *ngIf="errorFetchingFile && !isLoading" class="error-message">
+        {{ errorFetchingFile }}
+      </div>
+
+      <div *ngIf="requiresPassword && !isLoading" class="password-form">
+        <h2>Password Required</h2>
+        <p>This file is protected by a password.</p>
+        <form (ngSubmit)="onPasswordSubmit()">
+          <input type="password" [(ngModel)]="password" name="password" placeholder="Enter password" required />
+          <button type="submit">Submit</button>
+        </form>
+        <div *ngIf="invalidPassword" class="error-message">
+          Invalid password.
+        </div>
+      </div>
+
+      <div *ngIf="fileIsPending" class="pending-message">
+        File is still being processed.
+        <button (click)="retry()" class="retry-button">Retry</button>
+      </div>
+
+      <div *ngIf="fileData && fileContentUrl && !isLoading && !errorFetchingFile && !requiresPassword"
+        class="file-content-wrapper">
+        <div class="name-download-wrapper">
+
+          <h1 class="file-name">{{ fileData.originalName }}</h1>
+
+          <button (click)="downloadFile()" class="download-button">
+            <span class="material-icons">download</span> Download
+          </button>
+        </div>
+
+        <div class="media-and-details-wrapper">
+          <div class="media-container">
+            <img *ngIf="isImage()" [src]="fileContentUrl" alt="{{ fileData.originalName }}" class="media-element" />
+            <video *ngIf="isVideo()" [src]="fileContentUrl" controls class="media-element">
+              Your browser does not support the video tag.
+            </video>
+            <div *ngIf="!isImage() && !isVideo()" class="unknown-file-type">
+              Cannot preview this file type.
+            </div>
+          </div>
+
+          <div class="file-details">
+            <p><strong>Size</strong></p>
+            <p>{{ fileData.size | number }} bytes</p>
+            <p><strong>Views</strong></p>
+            <p>{{ fileData.vizualizations | number }}</p>
+            <p><strong>Downloads</strong></p>
+            <p>{{ fileData.downloads | number }}</p>
+          </div>
+        </div>
+
+
+
+        <div class="back-home-link">
+          <a routerLink="/">Back to Home</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

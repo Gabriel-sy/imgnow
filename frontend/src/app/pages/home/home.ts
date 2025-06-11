@@ -48,7 +48,7 @@ export class Home {
               .setFileSettings(result.customUrl, configResult)
               .subscribe(
                 (response: any) => {
-                  console.log('File settings updated:', response);
+                    window.location.href = `/${result.customUrl}`;
                 },
                 (error: any) => {
                   console.error('Error updating file settings:', error);

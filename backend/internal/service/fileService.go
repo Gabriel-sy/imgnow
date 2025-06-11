@@ -255,7 +255,7 @@ func (fs *FileService) HandleConfiguration(request types.FileSettings, customUrl
 
 	// Update password if provided
 	if request.Password != nil {
-		err := fs.UpdatePassword(customUrl, *request.Password)
+		err := fs.UpdatePassword(customUrl, request.Password)
 		if err != nil {
 			util.LogError(err, "Failed to update password", fs.app)
 			return err
@@ -265,7 +265,7 @@ func (fs *FileService) HandleConfiguration(request types.FileSettings, customUrl
 	return nil
 }
 
-func (fs *FileService) UpdatePassword(customUrl string, password string) error {
+func (fs *FileService) UpdatePassword(customUrl string, password *string) error {
 	err := fileRepo.UpdatePassword(fs.app, customUrl, password)
 	if err != nil {
 		util.LogError(err, "Failed to update password", fs.app)

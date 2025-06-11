@@ -18,9 +18,13 @@ func GenerateHash() string {
 	return string(b)
 }
 
-func HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
-	return string(bytes), err
+func HashPassword(password *string) (*string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(*password), 14)
+	if err != nil {
+		return nil, err
+	}
+	hashedPassword := string(bytes)
+	return &hashedPassword, nil
 }
 
 func CheckPasswordHash(password, hash string) bool {

@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { FileSettings } from '../types/file-settings';
+import { File as FileType } from '../types/file'; // Import FileType
 
 interface UploadResponse {
   message: string;
@@ -35,13 +36,33 @@ export class FileService {
     );
   }
 
-  getFileLink(customUrl: string): Observable<{ path: string }> {
-    return this.http.get<{ path: string }>(this.API_URL + '/' + customUrl);
+  getFileWithPassword(
+    customUrl: string,
+    password: string
+  ): Observable<{ path: string; requiresPassword?: boolean }> {
+    return this.http.post<{ path: string; requiresPassword?: boolean }>(
+      this.API_URL + '/' + customUrl,
+      { password }
+    );
+  }
+
+  getFileWithoutPassword(customUrl: string): Observable<{ path: string; requiresPassword?: boolean }> {
+    return this.http.get<{ path: string; requiresPassword?: boolean }>(
+      this.API_URL + '/' + customUrl
+    );
   }
 
   getFileStatus(customUrl: string): Observable<{ status: string }> {
     return this.http.get<{ status: string }>(
       this.API_URL + '/' + customUrl + '/status'
     );
+  }
+
+  getFileInfo(customUrl: string): Observable<FileType> {
+    return this.http.get<FileType>(`${this.API_URL}/${customUrl}/info`);
+  }
+
+  addDownload(customUrl: string): Observable<any> {
+    return this.http.put(`${this.API_URL}/${customUrl}/addDownload`, {});
   }
 }
